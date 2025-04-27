@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Tracking with Location</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .tracking-link {
+            margin: 15px 0;
+            padding: 10px;
+            background: #e9ffe9;
+            border-left: 4px solid #4CAF50;
+        }
+        .location-data {
+            margin-top: 30px;
+        }
+        .location-entry {
+            padding: 10px;
+            margin: 10px 0;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>URL Tracking with Location</h1>
+        <p>Masukkan URL yang ingin Anda lacak:</p>
+        
+        <form id="trackingForm">
+            <input type="url" id="originalUrl" placeholder="https://example.com" required>
+            <button type="submit">Buat Link Tracking</button>
+        </form>
+        
+        <div id="generatedLink" class="tracking-link" style="display: none;">
+            <h3>Link Tracking Anda:</h3>
+            <input type="text" id="trackingUrl" readonly style="width: 100%; padding: 8px;">
+            <p>Bagikan link ini. Ketika diklik, akan mengarah ke URL asli dan merekam lokasi pengunjung.</p>
+        </div>
+        
+        <div class="location-data">
+            <h2>Data Lokasi yang Terekam</h2>
+            <button id="refreshData">Refresh Data</button>
+            <div id="locationResults"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Generate tracking link
+            document.getElementById('trackingForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const originalUrl = document.getElementById('originalUrl').value;
+                const trackingCode = generateTrackingCode();
+                
+                // Simpan mapping ke localStorage
+                const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+                trackingData[trackingCode] = {
+                    originalUrl: originalUrl,
+                    created: new Date().toISOString(),
+                    clicks: []
+                };
+                localStorage.setItem('trackingData', JSON.stringify(trackingData));
+                
+                // Tampilkan link tracking
+                const trackingUrl = window.location.href.split('?')[0] + '?track=' + trackingCode;
+                document.getElementById('trackingUrl').value = trackingUrl;
+                document.getElementById('generatedLink').style.display = 'block';
+            });
+            
+            // Check if this is a tracking link
+            const urlParams = new URLSearchParams(window.location.search);
+            const trackId = urlParams.get('track');
+            
+            if (trackId) {
+                // Get original URL from localStorage
+                const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+                const trackedLink = trackingData[trackId];
+                
+                if (trackedLink) {
+                    // Record the click with location
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            function(position) {
+                                // Add click data
+                                trackedLink.clicks.push({
+                                    timestamp: new Date().toISOString(),
+                                    latitude: position.coords.latitude,
+                                    longitude: position.coords.longitude,
+                                    accuracy: position.coords.accuracy,
+                                    userAgent: navigator.userAgent
+                                });
+                                
+                                // Save back to localStorage
+                                trackingData[trackId] = trackedLink;
+                                localStorage.setItem('trackingData', JSON.stringify(trackingData));
+                                
+                                // Redirect to original URL
+                                window.location.href = trackedLink.originalUrl;
+                            },
+                            function(error) {
+                                console.error("Error getting location:", error);
+                                // Redirect even if location fails
+                                window.location.href = trackedLink.originalUrl;
+                            },
+                            { enableHighAccuracy: true }
+                        );
+                    } else {
+                        // Geolocation not supported, just redirect
+                        window.location.href = trackedLink.originalUrl;
+                    }
+                }
+            }
+            
+            // Display tracking data
+            function displayTrackingData() {
+                const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+                const resultsDiv = document.getElementById('locationResults');
+                
+                if (Object.keys(trackingData).length === 0) {
+                    resultsDiv.innerHTML = '<p>Belum ada data lokasi yang terekam.</p>';
+                    return;
+                }
+                
+                let html = '';
+                for (const [code, data] of Object.entries(trackingData)) {
+                    html += `<h3>Tracking Code: ${code}</h3>`;
+                    html += `<p>URL Asli: <a href="${data.originalUrl}" target="_blank">${data.originalUrl}</a></p>`;
+                    html += `<p>Dibuat: ${new Date(data.created).toLocaleString()}</p>`;
+                    
+                    if (data.clicks && data.clicks.length > 0) {
+                        html += '<table>';
+                        html += '<tr><th>Waktu</th><th>Latitude</th><th>Longitude</th><th>Akurasi</th><th>Browser</th><th>Peta</th></tr>';
+                        
+                        data.clicks.forEach(click => {
+                            html += `
+                                <tr>
+                                    <td>${new Date(click.timestamp).toLocaleString()}</td>
+                                    <td>${click.latitude}</td>
+                                    <td>${click.longitude}</td>
+                                    <td>${click.accuracy} meter</td>
+                                    <td>${click.userAgent.substring(0, 50)}...</td>
+                                    <td><a href="https://www.google.com/maps?q=${click.latitude},${click.longitude}" target="_blank">Lihat</a></td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</table>';
+                    } else {
+                        html += '<p>Belum ada yang mengklik link ini.</p>';
+                    }
+                }
+                
+                resultsDiv.innerHTML = html;
+            }
+            
+            // Refresh data button
+            document.getElementById('refreshData').addEventListener('click', displayTrackingData);
+            
+            // Initial display
+            displayTrackingData();
+        });
+        
+        function generateTrackingCode() {
+            return 'track-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+        }
+    </script>
+</body>
+</html>
