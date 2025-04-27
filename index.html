@@ -42,15 +42,12 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 2rem;
-            animation: fadeIn 0.8s ease-out;
         }
         
         .logo {
             font-size: 1.8rem;
             font-weight: 700;
             color: var(--primary);
-            display: flex;
-            align-items: center;
         }
         
         /* Consent Modal */
@@ -61,7 +58,7 @@
             right: 0;
             bottom: 0;
             background: rgba(0,0,0,0.7);
-            display: none;
+            display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -341,12 +338,16 @@
             const generateBtn = document.getElementById('generateBtn');
             const copyBtn = document.getElementById('copyBtn');
             const refreshBtn = document.getElementById('refreshBtn');
+            const originalUrlInput = document.getElementById('originalUrl');
             const generatedLink = document.getElementById('generatedLink');
+            const trackingUrlInput = document.getElementById('trackingUrl');
             const dashboard = document.getElementById('dashboard');
             
             // Check consent
             if (localStorage.getItem('geoLinkConsent') !== 'true') {
                 consentModal.style.display = 'flex';
+            } else {
+                consentModal.style.display = 'none';
             }
             
             // Consent handlers
@@ -361,7 +362,7 @@
             
             // Generate tracking link
             generateBtn.addEventListener('click', function() {
-                const originalUrl = document.getElementById('originalUrl').value.trim();
+                let originalUrl = originalUrlInput.value.trim();
                 
                 if (!originalUrl) {
                     alert('Please enter a valid URL');
@@ -369,26 +370,34 @@
                 }
                 
                 // Add http:// if missing
-                let processedUrl = originalUrl;
-                if (!processedUrl.startsWith('http://') && !processedUrl.startsWith('https://')) {
-                    processedUrl = 'http://' + processedUrl;
+                if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+                    originalUrl = 'http://' + originalUrl;
+                }
+                
+                try {
+                    // Validate URL
+                    new URL(originalUrl);
+                } catch (e) {
+                    alert('Please enter a valid URL');
+                    return;
                 }
                 
                 // Generate unique tracking code
                 const trackingCode = 'trk-' + Math.random().toString(36).substr(2, 12);
-                const trackingUrl = window.location.href.split('?')[0] + '?track=' + trackingCode;
+                const currentPageUrl = window.location.href.split('?')[0];
+                const trackingUrl = currentPageUrl + '?track=' + trackingCode;
                 
                 // Save to localStorage
                 const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
                 trackingData[trackingCode] = {
-                    originalUrl: processedUrl,
+                    originalUrl: originalUrl,
                     created: new Date().toISOString(),
                     clicks: []
                 };
                 localStorage.setItem('trackingData', JSON.stringify(trackingData));
                 
                 // Show generated link
-                document.getElementById('trackingUrl').value = trackingUrl;
+                trackingUrlInput.value = trackingUrl;
                 generatedLink.style.display = 'block';
                 
                 // Show dashboard
@@ -398,8 +407,7 @@
             
             // Copy button
             copyBtn.addEventListener('click', function() {
-                const copyText = document.getElementById('trackingUrl');
-                copyText.select();
+                trackingUrlInput.select();
                 document.execCommand('copy');
                 
                 // Visual feedback
@@ -429,7 +437,6 @@
             
             // Initialize map
             let map = null;
-            let markers = [];
             
             function processTracking(trackId) {
                 const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
@@ -452,7 +459,7 @@
                                 trackingData[trackId] = trackedLink;
                                 localStorage.setItem('trackingData', JSON.stringify(trackingData));
                                 
-                                // Redirect
+                                // Redirect to original URL
                                 window.location.href = trackedLink.originalUrl;
                             },
                             function(error) {
@@ -467,7 +474,8 @@
                                 trackingData[trackId] = trackedLink;
                                 localStorage.setItem('trackingData', JSON.stringify(trackingData));
                                 window.location.href = trackedLink.originalUrl;
-                            }
+                            },
+                            { enableHighAccuracy: true, timeout: 10000 }
                         );
                     } else {
                         // No geolocation support
@@ -481,6 +489,9 @@
                         localStorage.setItem('trackingData', JSON.stringify(trackingData));
                         window.location.href = trackedLink.originalUrl;
                     }
+                } else {
+                    // Invalid tracking code
+                    window.location.href = window.location.href.split('?')[0];
                 }
             }
             
@@ -520,27 +531,47 @@
             }
             
             function initMap(clicks) {
+                // Remove existing map if any
                 if (map) {
                     map.remove();
                 }
                 
+                // Create new map container
+                const mapContainer = document.getElementById('mapContainer');
                 mapContainer.innerHTML = '<div id="map"></div>';
                 
-                const firstClick = clicks[0];
-                map = L.map('map').setView([firstClick.latitude, firstClick.longitude], 3);
+                // Get first location for centering
+                const firstLocation = clicks.find(c => c.latitude && c.longitude);
+                if (!firstLocation) return;
                 
+                // Initialize map
+                map = L.map('map').setView([firstLocation.latitude, firstLocation.longitude], 3);
+                
+                // Add tile layer
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
                 
-                // Add markers
+                // Add markers for each location
                 clicks.forEach(click => {
                     if (click.latitude && click.longitude) {
                         L.marker([click.latitude, click.longitude])
                             .addTo(map)
-                            .bindPopup(`<b>${new Date(click.timestamp).toLocaleString()}</b><br>Accuracy: ${Math.round(click.accuracy)}m`);
+                            .bindPopup(`
+                                <b>${new Date(click.timestamp).toLocaleString()}</b><br>
+                                Accuracy: ${Math.round(click.accuracy)} meters<br>
+                                <a href="https://www.google.com/maps?q=${click.latitude},${click.longitude}" target="_blank">View on Google Maps</a>
+                            `);
                     }
                 });
+                
+                // Fit map to show all markers
+                if (clicks.length > 1) {
+                    const bounds = L.latLngBounds(
+                        clicks.map(click => [click.latitude, click.longitude])
+                    );
+                    map.fitBounds(bounds.pad(0.2));
+                }
             }
         });
     </script>
