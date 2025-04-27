@@ -61,11 +61,10 @@
             right: 0;
             bottom: 0;
             background: rgba(0,0,0,0.7);
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            animation: fadeIn 0.3s ease-out;
         }
         
         .consent-modal {
@@ -75,7 +74,6 @@
             max-width: 500px;
             width: 90%;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            animation: slideUp 0.4s ease-out;
         }
         
         .modal-header {
@@ -100,13 +98,6 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
             padding: 2rem;
             margin-bottom: 2rem;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            animation: slideUp 0.6s ease-out;
-        }
-        
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
         }
         
         .card-header {
@@ -142,13 +133,6 @@
             border: 1px solid #e0e0e0;
             border-radius: 8px;
             font-size: 1rem;
-            transition: border 0.3s ease;
-        }
-        
-        input[type="url"]:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
         }
         
         .btn {
@@ -159,7 +143,6 @@
             border-radius: 8px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
             border: none;
             font-size: 1rem;
         }
@@ -169,11 +152,6 @@
             color: white;
         }
         
-        .btn-primary:hover {
-            background-color: var(--secondary);
-            transform: translateY(-2px);
-        }
-        
         /* Generated Link Styles */
         .generated-link {
             margin-top: 1.5rem;
@@ -181,7 +159,7 @@
             background-color: rgba(67, 97, 238, 0.05);
             border-radius: 8px;
             border-left: 4px solid var(--primary);
-            animation: fadeIn 0.8s ease-out;
+            display: none;
         }
         
         .link-display {
@@ -204,11 +182,6 @@
             border: none;
             border-radius: 0 8px 8px 0;
             cursor: pointer;
-            transition: background 0.3s ease;
-        }
-        
-        .copy-btn:hover {
-            background-color: var(--secondary);
         }
         
         /* Dashboard Styles */
@@ -228,12 +201,6 @@
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease;
-            animation: fadeIn 0.8s ease-out;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
         }
         
         .stat-title {
@@ -255,7 +222,6 @@
             overflow: hidden;
             margin-bottom: 2rem;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            animation: fadeIn 1s ease-out;
         }
         
         #map {
@@ -274,27 +240,6 @@
         .footer a {
             color: var(--primary);
             text-decoration: none;
-        }
-        
-        .footer a:hover {
-            text-decoration: underline;
-        }
-        
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes slideUp {
-            from { 
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to { 
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
     </style>
 </head>
@@ -342,7 +287,7 @@
                 Generate Tracking Link
             </button>
             
-            <div class="generated-link" id="generatedLink" style="display: none;">
+            <div class="generated-link" id="generatedLink">
                 <h3>Your Tracking Link:</h3>
                 <p>Share this link to track when and where it's opened</p>
                 <div class="link-display">
@@ -389,32 +334,33 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if consent was given
-            const consentGiven = localStorage.getItem('geoLinkConsent') === 'true';
+            // Initialize elements
+            const consentModal = document.getElementById('consentModal');
+            const acceptBtn = document.getElementById('acceptBtn');
+            const closeModal = document.getElementById('closeModal');
+            const generateBtn = document.getElementById('generateBtn');
+            const copyBtn = document.getElementById('copyBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const generatedLink = document.getElementById('generatedLink');
+            const dashboard = document.getElementById('dashboard');
             
-            if (!consentGiven) {
-                document.getElementById('consentModal').style.display = 'flex';
-            } else {
-                document.getElementById('consentModal').style.display = 'none';
+            // Check consent
+            if (localStorage.getItem('geoLinkConsent') !== 'true') {
+                consentModal.style.display = 'flex';
             }
             
-            // Handle consent
-            document.getElementById('acceptBtn').addEventListener('click', function() {
+            // Consent handlers
+            acceptBtn.addEventListener('click', function() {
                 localStorage.setItem('geoLinkConsent', 'true');
-                document.getElementById('consentModal').style.display = 'none';
+                consentModal.style.display = 'none';
             });
             
-            document.getElementById('closeModal').addEventListener('click', function() {
-                document.getElementById('consentModal').style.display = 'none';
+            closeModal.addEventListener('click', function() {
+                consentModal.style.display = 'none';
             });
-            
-            // Initialize map (hidden until data is available)
-            const mapContainer = document.getElementById('mapContainer');
-            let map = null;
-            let markers = [];
             
             // Generate tracking link
-            document.getElementById('generateBtn').addEventListener('click', function() {
+            generateBtn.addEventListener('click', function() {
                 const originalUrl = document.getElementById('originalUrl').value.trim();
                 
                 if (!originalUrl) {
@@ -429,11 +375,11 @@
                 }
                 
                 // Generate unique tracking code
-                const trackingCode = generateTrackingCode();
+                const trackingCode = 'trk-' + Math.random().toString(36).substr(2, 12);
                 const trackingUrl = window.location.href.split('?')[0] + '?track=' + trackingCode;
                 
                 // Save to localStorage
-                const trackingData = JSON.parse(localStorage.getItem('trackingData') || {};
+                const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
                 trackingData[trackingCode] = {
                     originalUrl: processedUrl,
                     created: new Date().toISOString(),
@@ -443,49 +389,57 @@
                 
                 // Show generated link
                 document.getElementById('trackingUrl').value = trackingUrl;
-                document.getElementById('generatedLink').style.display = 'block';
+                generatedLink.style.display = 'block';
                 
-                // Show dashboard if not shown
-                if (document.getElementById('dashboard').style.display === 'none') {
-                    document.getElementById('dashboard').style.display = 'block';
-                }
-                
-                // Refresh dashboard
+                // Show dashboard
+                dashboard.style.display = 'block';
                 updateDashboard();
             });
             
             // Copy button
-            document.getElementById('copyBtn').addEventListener('click', function() {
+            copyBtn.addEventListener('click', function() {
                 const copyText = document.getElementById('trackingUrl');
                 copyText.select();
                 document.execCommand('copy');
                 
-                // Change button text temporarily
-                const btn = document.getElementById('copyBtn');
-                btn.textContent = 'Copied!';
+                // Visual feedback
+                copyBtn.textContent = 'Copied!';
                 setTimeout(() => {
-                    btn.textContent = 'Copy';
+                    copyBtn.textContent = 'Copy';
                 }, 2000);
             });
             
             // Refresh button
-            document.getElementById('refreshBtn').addEventListener('click', updateDashboard);
+            refreshBtn.addEventListener('click', updateDashboard);
             
             // Check if this is a tracking link
             const urlParams = new URLSearchParams(window.location.search);
             const trackId = urlParams.get('track');
             
             if (trackId) {
-                // Process tracking
-                const trackingData = JSON.parse(localStorage.getItem('trackingData') || {});
+                processTracking(trackId);
+            }
+            
+            // Initialize dashboard if data exists
+            const existingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+            if (Object.keys(existingData).length > 0) {
+                dashboard.style.display = 'block';
+                updateDashboard();
+            }
+            
+            // Initialize map
+            let map = null;
+            let markers = [];
+            
+            function processTracking(trackId) {
+                const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
                 const trackedLink = trackingData[trackId];
                 
                 if (trackedLink) {
-                    // Try to get location
                     if (navigator.geolocation) {
                         navigator.geolocation.getCurrentPosition(
                             function(position) {
-                                // Record the click with location
+                                // Record location
                                 trackedLink.clicks.push({
                                     timestamp: new Date().toISOString(),
                                     latitude: position.coords.latitude,
@@ -494,32 +448,29 @@
                                     userAgent: navigator.userAgent
                                 });
                                 
-                                // Save back to localStorage
+                                // Save data
                                 trackingData[trackId] = trackedLink;
                                 localStorage.setItem('trackingData', JSON.stringify(trackingData));
                                 
-                                // Redirect to original URL
+                                // Redirect
                                 window.location.href = trackedLink.originalUrl;
                             },
                             function(error) {
-                                console.error("Error getting location:", error);
-                                // Record click without location
+                                console.log("Location error:", error);
+                                // Record without location
                                 trackedLink.clicks.push({
                                     timestamp: new Date().toISOString(),
                                     userAgent: navigator.userAgent,
-                                    error: "Location permission denied"
+                                    error: error.message
                                 });
                                 
                                 trackingData[trackId] = trackedLink;
                                 localStorage.setItem('trackingData', JSON.stringify(trackingData));
-                                
-                                // Redirect anyway
                                 window.location.href = trackedLink.originalUrl;
-                            },
-                            { enableHighAccuracy: true, timeout: 5000 }
+                            }
                         );
                     } else {
-                        // Geolocation not supported
+                        // No geolocation support
                         trackedLink.clicks.push({
                             timestamp: new Date().toISOString(),
                             userAgent: navigator.userAgent,
@@ -528,26 +479,14 @@
                         
                         trackingData[trackId] = trackedLink;
                         localStorage.setItem('trackingData', JSON.stringify(trackingData));
-                        
                         window.location.href = trackedLink.originalUrl;
                     }
                 }
             }
             
-            // Initialize dashboard if there's existing data
-            const existingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
-            if (Object.keys(existingData).length > 0) {
-                document.getElementById('dashboard').style.display = 'block';
-                updateDashboard();
-            }
-            
-            // Helper functions
-            function generateTrackingCode() {
-                return 'trk-' + Math.random().toString(36).substr(2, 12);
-            }
-            
             function updateDashboard() {
                 const trackingData = JSON.parse(localStorage.getItem('trackingData') || '{}');
+                const mapContainer = document.getElementById('mapContainer');
                 
                 // Calculate stats
                 let totalLinks = 0;
@@ -572,47 +511,36 @@
                 document.getElementById('totalClicks').textContent = totalClicks;
                 document.getElementById('uniqueLocations').textContent = uniqueLocations.size;
                 
-                // Initialize or update map if we have location data
+                // Update map
                 if (uniqueLocations.size > 0) {
                     initMap(allClicks);
                 } else {
-                    mapContainer.innerHTML = '<p>No location data available to display map</p>';
+                    mapContainer.innerHTML = '<p>No location data available</p>';
                 }
             }
             
             function initMap(clicks) {
                 if (map) {
                     map.remove();
-                    markers = [];
                 }
                 
                 mapContainer.innerHTML = '<div id="map"></div>';
                 
-                // Create map centered on first location
-                const firstClick = clicks.find(c => c.latitude);
-                if (!firstClick) return;
-                
+                const firstClick = clicks[0];
                 map = L.map('map').setView([firstClick.latitude, firstClick.longitude], 3);
                 
-                // Add tile layer
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(map);
                 
-                // Add markers for each location
+                // Add markers
                 clicks.forEach(click => {
                     if (click.latitude && click.longitude) {
-                        const marker = L.marker([click.latitude, click.longitude]).addTo(map)
+                        L.marker([click.latitude, click.longitude])
+                            .addTo(map)
                             .bindPopup(`<b>${new Date(click.timestamp).toLocaleString()}</b><br>Accuracy: ${Math.round(click.accuracy)}m`);
-                        markers.push(marker);
                     }
                 });
-                
-                // Fit map to show all markers
-                if (markers.length > 0) {
-                    const group = new L.featureGroup(markers);
-                    map.fitBounds(group.getBounds().pad(0.2));
-                }
             }
         });
     </script>
